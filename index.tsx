@@ -101,7 +101,7 @@ const VerificationScreen = ({ authMethod, onVerify }: { authMethod: string, onVe
     );
 };
 
-const ProfilePictureScreen = ({ onContinue, updateProfile }: { onContinue: () => void, updateProfile: (p: Partial<UserProfile>) => void }) => {
+const ProfilePictureScreen = ({ onContinue, updateProfile, onBack }: { onContinue: () => void, updateProfile: (p: Partial<UserProfile>) => void, onBack: () => void }) => {
     const [photo, setPhoto] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -120,7 +120,7 @@ const ProfilePictureScreen = ({ onContinue, updateProfile }: { onContinue: () =>
 
     return (
         <div className="profile-setup-screen">
-            <div className="progress-bar"><div className="progress" style={{width: '33%'}}></div></div>
+             <button onClick={onBack} className="back-button" aria-label="Volver">‹</button>
             <header>
                 <h2>Añade tu foto de perfil</h2>
                 <p>¡Muéstranos tu mejor sonrisa!</p>
@@ -406,7 +406,7 @@ const App = () => {
 
     const renderApp = () => {
         switch (screen) {
-            case 'profilePicture': return <ProfilePictureScreen onContinue={() => setScreen('profileDetails')} updateProfile={updateProfile}/>;
+            case 'profilePicture': return <ProfilePictureScreen onContinue={() => setScreen('profileDetails')} updateProfile={updateProfile} onBack={handleLogout}/>;
             case 'profileDetails': return <ProfileDetailsScreen onContinue={() => setScreen('profileInterests')} updateProfile={updateProfile} onBack={() => setScreen('profilePicture')}/>;
             case 'profileInterests': return <ProfileInterestsScreen onFinish={() => setScreen('setup')} updateProfile={updateProfile} onBack={() => setScreen('profileDetails')} />;
             case 'setup': return <SetupScreen onStart={handleStart} />;
