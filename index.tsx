@@ -1,39 +1,102 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { createRoot } from 'react-dom/client';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
-// --- DATOS DE PRUEBA ---
+// --- DATOS DE CONFIGURACIÓN ---
 const GENRES = ["Acción", "Comedia", "Drama", "Ciencia Ficción", "Terror", "Romance", "Suspense", "Animación"];
 const PLATFORMS = ["Netflix", "Prime Video", "Disney+", "Max"];
 const INTERESTS = ["Viajes", "Música", "Gaming", "Deportes", "Arte", "Cocina", "Libros", "Tecnología", "Moda"];
-const MOVIES = [
-    { id: 1, title: "Origen", poster: "https://image.tmdb.org/t/p/w500/oYuLEt3zVCKq57qu2F8dT7NIa6f.jpg", genres: ["Acción", "Ciencia Ficción"], platforms: ["Netflix", "Max"], rating: 8.8, year: 2010 },
-    { id: 2, title: "Matrix", poster: "https://image.tmdb.org/t/p/w500/f89JAYsAFSSQd2O2EVyA0loJxgL.jpg", genres: ["Acción", "Ciencia Ficción"], platforms: ["Max"], rating: 8.7, year: 1999 },
-    { id: 3, title: "Parásitos", poster: "https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg", genres: ["Suspense", "Drama"], platforms: ["Prime Video"], rating: 8.6, year: 2019 },
-    { id: 4, title: "El Padrino", poster: "https://image.tmdb.org/t/p/w500/3bhkrj58Vtu7enYsRolD1fZdja1.jpg", genres: ["Drama"], platforms: ["Netflix"], rating: 9.2, year: 1972 },
-    { id: 5, title: "Pulp Fiction", poster: "https://image.tmdb.org/t/p/w500/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg", genres: ["Suspense"], platforms: ["Max"], rating: 8.9, year: 1994 },
-    { id: 6, title: "Forrest Gump", poster: "https://image.tmdb.org/t/p/w500/arw2vcBveWOVZr6pxd9XTd1TdSm.jpg", genres: ["Comedia", "Drama", "Romance"], platforms: ["Netflix"], rating: 8.8, year: 1994 },
-    { id: 7, title: "El viaje de Chihiro", poster: "https://image.tmdb.org/t/p/w500/39wmItIW2zwAtoO7K4P7rni0e66.jpg", genres: ["Animación", "Romance"], platforms: ["Max"], rating: 8.6, year: 2001 },
-    { id: 8, title: "El Caballero Oscuro", poster: "https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg", genres: ["Acción", "Suspense"], platforms: ["Netflix", "Max"], rating: 9.0, year: 2008 },
-    { id: 9, title: "Coco", poster: "https://image.tmdb.org/t/p/w500/gGEsBOfGkYgHGNbb6cicbSpH1rg.jpg", genres: ["Animación", "Comedia"], platforms: ["Disney+"], rating: 8.4, year: 2017 },
-    { id: 10, title: "Up", poster: "https://image.tmdb.org/t/p/w500/2k21kC2WCyvQRV55SvsNnS2LpFt.jpg", genres: ["Animación", "Comedia", "Drama"], platforms: ["Disney+"], rating: 8.3, year: 2009 },
-    { id: 11, title: "El silencio de los corderos", poster: "https://image.tmdb.org/t/p/w500/uS9m8fcpZNaxg9I3Nso0iYvAQS.jpg", genres: ["Terror", "Suspense"], platforms: ["Prime Video"], rating: 8.6, year: 1991 },
-    { id: 12, title: "Déjame salir", poster: "https://image.tmdb.org/t/p/w500/kK9plkI35Q5a3fucK4h2kQv5qC9.jpg", genres: ["Terror", "Suspense"], platforms: ["Netflix"], rating: 7.7, year: 2017 },
-    { id: 13, title: "Resacón en Las Vegas", poster: "https://image.tmdb.org/t/p/w500/bCl5Ra12sY1A7iA0S38V2vU2aA.jpg", genres: ["Comedia"], platforms: ["Netflix", "Max"], rating: 7.7, year: 2009 },
-    { id: 14, title: "La boda de mi mejor amiga", poster: "https://image.tmdb.org/t/p/w500/2o2d1XKyAYH8tQDP29A6b.jpg", genres: ["Comedia", "Romance"], platforms: ["Prime Video"], rating: 6.8, year: 2011 },
-    { id: 15, title: "Blade Runner 2049", poster: "https://image.tmdb.org/t/p/w500/gajva2L0rPYkEWjzgFlBXCAVBE5.jpg", genres: ["Ciencia Ficción", "Suspense"], platforms: ["Netflix"], rating: 8.0, year: 2017 }
-];
 
 // --- INICIALIZACIÓN DE LA API ---
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- TIPOS ---
-type Movie = { id: number; title: string; poster: string; genres: string[]; platforms: string[]; rating: number; year: number; };
+type Movie = { id: number; title: string; poster: string; genres: string[]; platforms: string[]; rating: number; year: number; synopsis: string; };
 type UserProfile = { photo: string | null; name: string; bio: string; interests: string[]; };
-type Screen = 'login' | 'verification' | 'profilePicture' | 'profileDetails' | 'profileInterests' | 'setup' | 'swipe' | 'myList' | 'profileView';
+type Friend = { id: number; name: string; photo: string; likedMovies: number[]; };
+type MatchNotification = { friendName: string; movieTitle: string; } | null;
+type Screen = 'login' | 'verification' | 'profilePicture' | 'profileDetails' | 'profileInterests' | 'setup' | 'swipe' | 'myList' | 'profileView' | 'friendsList' | 'chat';
+type UserPreferences = { genres: string[], platforms:string[] };
+
+// --- DATOS SIMULADOS ---
+const MOCK_FRIENDS: Friend[] = [
+    { id: 1, name: 'Ana', photo: 'https://i.pravatar.cc/150?u=ana', likedMovies: [787699, 693134, 1022789] },
+    { id: 2, name: 'Carlos', photo: 'https://i.pravatar.cc/150?u=carlos', likedMovies: [823464, 787699, 940721] },
+    { id: 3, name: 'Sofia', photo: 'https://i.pravatar.cc/150?u=sofia', likedMovies: [693134, 1011985, 572802] },
+];
+
+// --- NUEVOS COMPONENTES SOCIALES ---
+
+const AddFriendModal = ({ onClose }: { onClose: () => void }) => {
+    const [copyText, setCopyText] = useState('Copiar');
+    const friendLink = `https://cineboard.app/add?user=12345`;
+
+    const handleCopy = () => {
+        navigator.clipboard.writeText(friendLink).then(() => {
+            setCopyText('¡Copiado!');
+            setTimeout(() => setCopyText('Copiar'), 2000);
+        });
+    };
+
+    return (
+        <div className="friend-modal-overlay" onClick={onClose}>
+            <div className="friend-modal" onClick={e => e.stopPropagation()}>
+                <h3>Comparte para agregar amigos</h3>
+                <p>Cualquiera con este enlace podrá enviarte una solicitud de amistad.</p>
+                <div className="friend-link-container">
+                    <input type="text" readOnly value={friendLink} className="friend-link-input" />
+                    <button onClick={handleCopy} className="copy-link-button">{copyText}</button>
+                </div>
+                <button onClick={onClose} className="close-modal-button">Cerrar</button>
+            </div>
+        </div>
+    );
+};
+
+const FriendsListScreen = ({ friends, setScreen, onSelectFriend }: { friends: Friend[], setScreen: (s: Screen) => void, onSelectFriend: (friend: Friend) => void }) => (
+    <div className="list-container">
+        <header className="header">
+            <button className="nav-button" onClick={() => setScreen('swipe')} aria-label="Volver">‹</button>
+            <h2 className="header-title">Amigos</h2>
+            <div style={{width: '36px'}}></div>
+        </header>
+        <div className="friends-list-screen">
+            {friends.map(friend => (
+                <div key={friend.id} className="friend-item" onClick={() => onSelectFriend(friend)}>
+                    <img src={friend.photo} alt={friend.name} className="friend-photo" />
+                    <span className="friend-name">{friend.name}</span>
+                    <span className="chat-arrow">›</span>
+                </div>
+            ))}
+        </div>
+    </div>
+);
+
+const ChatScreen = ({ friend, onBack }: { friend: Friend | null, onBack: () => void }) => (
+    <div className="chat-screen-container">
+        <header className="header">
+            <button className="nav-button" onClick={onBack} aria-label="Volver">‹</button>
+            <div className="chat-header-info">
+                <img src={friend?.photo} alt={friend?.name} />
+                <h2 className="header-title">{friend?.name}</h2>
+            </div>
+            <div style={{width: '36px'}}></div>
+        </header>
+        <div className="messages-container">
+            <div className="message-bubble friend">¡Hey! ¿Viste la última de ciencia ficción?</div>
+            <div className="message-bubble me">¡Claro! Me encantó. Justo te iba a escribir.</div>
+            <div className="message-bubble me">Tenemos que ver la próxima juntos.</div>
+            <div className="message-bubble friend">¡Totalmente! 🔥</div>
+        </div>
+        <div className="chat-input-area">
+            <input type="text" placeholder="Escribe un mensaje..." />
+            <button>Enviar</button>
+        </div>
+    </div>
+);
+
 
 // --- COMPONENTES DE AUTENTICACIÓN Y PERFIL ---
-
 const LoginScreen = ({ setScreen, setAuthMethod, onSocialLogin }: { setScreen: (s: Screen) => void, setAuthMethod: (m: string) => void, onSocialLogin: () => void }) => {
     const [identifier, setIdentifier] = useState('');
     const handleContinue = () => {
@@ -73,15 +136,19 @@ const VerificationScreen = ({ authMethod, onVerify }: { authMethod: string, onVe
         if (element.value !== "" && index < 5) {
             inputsRef.current[index + 1]?.focus();
         }
-        if (newCode.every(c => c !== '')) {
-            onVerify();
-        }
     };
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, index: number) => {
         if (e.key === "Backspace" && !code[index] && index > 0) {
             inputsRef.current[index - 1]?.focus();
         }
     };
+    
+    useEffect(() => {
+        if (code.every(c => c !== '')) {
+            onVerify();
+        }
+    }, [code, onVerify]);
+
     return (
         <div className="auth-screen">
             <header>
@@ -94,7 +161,6 @@ const VerificationScreen = ({ authMethod, onVerify }: { authMethod: string, onVe
                         <input key={index} ref={el => { inputsRef.current[index] = el; }} type="text" maxLength={1} value={data} onChange={e => handleChange(e.target, index)} onKeyDown={e => handleKeyDown(e, index)} className="code-input" />
                     ))}
                 </div>
-                <button className="continue-button" onClick={onVerify} disabled={code.some(c => c === '')}>Verificar</button>
             </div>
             <p className="resend-code">¿No recibiste el código? <span>Reenviar</span></p>
         </div>
@@ -239,25 +305,6 @@ const SetupScreen = ({ onStart }: { onStart: (genres: string[], platforms: strin
 };
 
 const MovieCard: React.FC<{ movie: Movie }> = ({ movie }) => {
-    const [synopsis, setSynopsis] = useState('');
-    const [loading, setLoading] = useState(true);
-    useEffect(() => {
-        let isCancelled = false;
-        const generateSynopsis = async () => {
-            setLoading(true);
-            try {
-                const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: `Genera una sinopsis original, divertida y de una sola frase para la película: "${movie.title}".` });
-                if (!isCancelled) setSynopsis(response.text);
-            } catch (error) {
-                console.error("Error al generar sinopsis:", error);
-                if (!isCancelled) setSynopsis("No se pudo cargar la sinopsis.");
-            } finally {
-                if (!isCancelled) setLoading(false);
-            }
-        };
-        generateSynopsis();
-        return () => { isCancelled = true; };
-    }, [movie]);
     return (
         <div className="movie-card" style={{ backgroundImage: `url(${movie.poster})` }}>
             <div className="card-content">
@@ -273,18 +320,54 @@ const MovieCard: React.FC<{ movie: Movie }> = ({ movie }) => {
                 </div>
                 <div className="card-synopsis-container">
                     <p className="synopsis-label">Sinopsis:</p>
-                    <div className="card-synopsis">{loading ? <div className="skeleton-loader"></div> : synopsis}</div>
+                    <div className="card-synopsis">{movie.synopsis || "No hay sinopsis disponible."}</div>
                 </div>
             </div>
         </div>
     );
 };
 
-const SwipeScreen = ({ movies, setSavedList, setScreen, userProfile }: { movies: Movie[], setSavedList: React.Dispatch<React.SetStateAction<Movie[]>>, setScreen: (screen: Screen) => void, userProfile: UserProfile | null }) => {
+const SwipeScreen = ({ movies, setSavedList, setScreen, userProfile, isLoading, isLoadingMore, loadMoreMovies, setHasShownGenreWarning, friends, setMatchNotification, userLikedMovies, setUserLikedMovies, matchNotification }: {
+    movies: Movie[],
+    setSavedList: React.Dispatch<React.SetStateAction<Movie[]>>,
+    setScreen: (screen: Screen) => void,
+    userProfile: UserProfile | null,
+    isLoading: boolean,
+    isLoadingMore: boolean,
+    loadMoreMovies: () => void,
+    setHasShownGenreWarning: (value: boolean) => void,
+    friends: Friend[],
+    setMatchNotification: (notification: MatchNotification) => void,
+    userLikedMovies: Set<number>,
+    setUserLikedMovies: React.Dispatch<React.SetStateAction<Set<number>>>,
+    matchNotification: MatchNotification,
+}) => {
     const [movieQueue, setMovieQueue] = useState(movies);
+    const isLoadingMoreRef = useRef(false);
+
+    useEffect(() => {
+        setMovieQueue(movies);
+    }, [movies]);
+
     const handleSwipe = (direction: 'left' | 'right' | 'up', movie: Movie) => {
-        if (direction === 'up') setSavedList(prev => [...prev, movie]);
-        const cardEl = document.querySelector('.movie-card:last-of-type');
+        if (direction === 'right') { // LIKE
+            const newLikedMovies = new Set(userLikedMovies).add(movie.id);
+            setUserLikedMovies(newLikedMovies);
+            // Check for match
+            for (const friend of friends) {
+                if (friend.likedMovies.includes(movie.id)) {
+                    setMatchNotification({ friendName: friend.name, movieTitle: movie.title });
+                    setTimeout(() => setMatchNotification(null), 4000); // Hide after 4s
+                    break; // Only show one match notification
+                }
+            }
+        } else if (movie.id === -1) {
+            setHasShownGenreWarning(true);
+        } else if (direction === 'up') {
+            setSavedList(prev => [...prev, movie]);
+        }
+        
+        const cardEl = document.querySelector('.movie-card:last-of-type, .genre-warning-card:last-of-type');
         if (cardEl) {
             let transform = '';
             if (direction === 'left') transform = 'translateX(-200%) rotate(-30deg)';
@@ -293,8 +376,20 @@ const SwipeScreen = ({ movies, setSavedList, setScreen, userProfile }: { movies:
             (cardEl as HTMLElement).style.transform = transform;
             (cardEl as HTMLElement).style.opacity = '0';
         }
-        setTimeout(() => setMovieQueue(prev => prev.slice(0, -1)), 300);
+
+        setTimeout(() => {
+            setMovieQueue(prev => {
+                const newQueue = prev.slice(0, -1);
+                if (!isLoadingMoreRef.current && newQueue.length <= 3) {
+                    isLoadingMoreRef.current = true;
+                    loadMoreMovies();
+                    setTimeout(() => { isLoadingMoreRef.current = false; }, 2000);
+                }
+                return newQueue;
+            });
+        }, 300);
     };
+
     const currentMovie = movieQueue.length > 0 ? movieQueue[movieQueue.length - 1] : null;
     return (
         <div className="swipe-screen">
@@ -303,15 +398,36 @@ const SwipeScreen = ({ movies, setSavedList, setScreen, userProfile }: { movies:
                     {userProfile?.photo ? <img src={userProfile.photo} alt="Perfil"/> : <div className="profile-placeholder-icon"></div>}
                 </button>
                 <h1 className="header-title" aria-label="Cine Board">CINE BOARD</h1>
+                 <button className="nav-button friends-button" onClick={() => setScreen('friendsList')} aria-label="Amigos">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                </button>
                 <button className="nav-button" onClick={() => setScreen('myList')} aria-label="Mi Lista">★</button>
             </header>
             <div className="card-container">
-                {movieQueue.length > 0 ? (
-                    movieQueue.map(movie => <MovieCard key={movie.id} movie={movie} />)
+                {isLoading ? (
+                    <div className="loading-spinner"></div>
+                ) : movieQueue.length > 0 ? (
+                    movieQueue.map(movie =>
+                        movie.id === -1 ? (
+                            <div key={movie.id} className="genre-warning-card">
+                                <h3>¡Nuevos Horizontes!</h3>
+                                <p>{movie.synopsis}</p>
+                            </div>
+                        ) : (
+                            <MovieCard key={movie.id} movie={movie} />
+                        )
+                    )
+                ) : isLoadingMore ? (
+                    <div className="loading-spinner"></div>
                 ) : (
                     <div className="no-more-cards"><h3>¡Eso es todo por ahora!</h3><p>Vuelve más tarde para más recomendaciones.</p></div>
                 )}
             </div>
+             {matchNotification && (
+                <div className="match-notification">
+                    <p>A <strong>{matchNotification.friendName}</strong> también le interesa este título.</p>
+                </div>
+            )}
             {currentMovie && (
               <div className="action-buttons">
                   <button className="action-button dislike" onClick={() => handleSwipe('left', currentMovie)} aria-label="No me interesa"><svg viewBox="0 0 24 24"><path d="M18.36 5.64a9 9 0 10-12.72 12.72 9 9 0 0012.72-12.72zM12 21a9 9 0 110-18 9 9 0 010 18zm-1.41-11.59L12 10.83l1.41-1.42L14.83 12l-1.42 1.41L12 12.24l-1.41 1.42L9.17 12l1.42-1.41z"/></svg></button>
@@ -340,48 +456,143 @@ const MyListScreen = ({ savedList, setScreen }: { savedList: Movie[], setScreen:
     </div>
 );
 
-const ProfileScreen = ({ userProfile, setScreen, onLogout }: { userProfile: UserProfile, setScreen: (s: Screen) => void, onLogout: () => void }) => (
-    <div className="profile-view-screen">
-        <header className="header">
-            <button className="nav-button" onClick={() => setScreen('swipe')} aria-label="Volver">‹</button>
-            <h2 className="header-title">Mi Perfil</h2>
-            <div style={{width: '36px'}}></div>
-        </header>
-        <div className="profile-content">
-            <div className="profile-card">
-                <img src={userProfile.photo!} alt={userProfile.name} className="profile-photo"/>
-                <h2>{userProfile.name}</h2>
-                <p className="profile-bio">"{userProfile.bio}"</p>
-                <div className="profile-interests">
-                    <h3>Intereses</h3>
-                    <div className="interests-tags">
-                        {userProfile.interests.map(interest => <span key={interest} className="interest-tag">{interest}</span>)}
+const ProfileScreen = ({ userProfile, setScreen, onLogout }: { userProfile: UserProfile, setScreen: (s: Screen) => void, onLogout: () => void }) => {
+    const [showModal, setShowModal] = useState(false);
+    return (
+        <div className="profile-view-screen">
+             {showModal && <AddFriendModal onClose={() => setShowModal(false)} />}
+            <header className="header">
+                <button className="nav-button" onClick={() => setScreen('swipe')} aria-label="Volver">‹</button>
+                <h2 className="header-title">Mi Perfil</h2>
+                <div style={{width: '36px'}}></div>
+            </header>
+            <div className="profile-content">
+                <div className="profile-card">
+                    <img src={userProfile.photo!} alt={userProfile.name} className="profile-photo"/>
+                    <h2>{userProfile.name}</h2>
+                    <p className="profile-bio">"{userProfile.bio}"</p>
+                    <div className="profile-interests">
+                        <h3>Intereses</h3>
+                        <div className="interests-tags">
+                            {userProfile.interests.map(interest => <span key={interest} className="interest-tag">{interest}</span>)}
+                        </div>
                     </div>
                 </div>
+                <div className="profile-actions">
+                    <button className="add-friend-button" onClick={() => setShowModal(true)}>Agregar Amigos</button>
+                    <button className="logout-button" onClick={onLogout}>Cerrar Sesión</button>
+                </div>
             </div>
-            <button className="logout-button" onClick={onLogout}>Cerrar Sesión</button>
         </div>
-    </div>
-);
+    );
+};
 
 
 const App = () => {
     const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [isLoggingIn, setIsLoggingIn] = useState(false);
     const [screen, setScreen] = useState<Screen>('login');
     const [authMethod, setAuthMethod] = useState('');
     const [userProfile, setUserProfile] = useState<UserProfile>({ photo: null, name: '', bio: '', interests: [] });
     const [recommendedMovies, setRecommendedMovies] = useState<Movie[]>([]);
     const [savedList, setSavedList] = useState<Movie[]>([]);
+    const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [allShownMovieTitles, setAllShownMovieTitles] = useState<Set<string>>(new Set());
+    const [hasShownGenreWarning, setHasShownGenreWarning] = useState(false);
+    const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
+    
+    // Social State
+    const [friends, setFriends] = useState<Friend[]>(MOCK_FRIENDS);
+    const [userLikedMovies, setUserLikedMovies] = useState<Set<number>>(new Set());
+    const [matchNotification, setMatchNotification] = useState<MatchNotification>(null);
+    const [activeChatFriend, setActiveChatFriend] = useState<Friend | null>(null);
 
-    const handleStart = (genres: string[], platforms: string[]) => {
-        const filteredMovies = MOVIES.filter(m => m.genres.some(g => genres.includes(g)) && m.platforms.some(p => platforms.includes(p)));
-        setRecommendedMovies(filteredMovies.reverse());
-        setScreen('swipe');
+    const movieSchema = {
+        type: Type.OBJECT,
+        properties: {
+            id: { type: Type.NUMBER, description: "A unique integer ID for the movie from an external database like TMDb." },
+            title: { type: Type.STRING },
+            poster: { type: Type.STRING, description: "URL of a high-quality movie poster." },
+            genres: { type: Type.ARRAY, items: { type: Type.STRING } },
+            platforms: { type: Type.ARRAY, items: { type: Type.STRING } },
+            rating: { type: Type.NUMBER },
+            year: { type: Type.NUMBER },
+            synopsis: { type: Type.STRING, description: "A concise and engaging synopsis of the movie, in Spanish." },
+        },
+        required: ["id", "title", "poster", "genres", "platforms", "rating", "year", "synopsis"]
     };
 
+    const fetchMovies = useCallback(async (count: number, preferences: UserPreferences, exclude: string[]) => {
+        const useExpandedSearch = allShownMovieTitles.size >= 15;
+
+        let prompt;
+        if (useExpandedSearch) {
+             prompt = `Recomiéndame ${count} películas de cualquier género. Sorpréndeme con una mezcla de películas populares, clásicos de culto, y joyas ocultas o cine indie. Proporciona IDs reales de TMDb. Evita estas películas que ya han sido mostradas: ${exclude.join(', ')}.`;
+        } else {
+            prompt = `Recomiéndame ${count} películas de los géneros: ${preferences.genres.join(', ')}. Deben estar disponibles en estas plataformas de streaming: ${preferences.platforms.join(', ')}. Sorpréndeme con una mezcla de películas populares, clásicos de culto, y joyas ocultas o cine indie. Proporciona IDs reales de TMDb. Evita estas películas que ya han sido mostradas: ${exclude.join(', ')}.`;
+        }
+
+        try {
+            const response = await ai.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    responseMimeType: "application/json",
+                    responseSchema: { type: Type.ARRAY, items: movieSchema },
+                }
+            });
+            const newMovies: Movie[] = JSON.parse(response.text);
+            const uniqueNewMovies = newMovies.filter(movie => movie.title && !allShownMovieTitles.has(movie.title));
+            return uniqueNewMovies;
+        } catch (error) {
+            console.error("Error fetching movies:", error);
+            return [];
+        }
+    }, [allShownMovieTitles]);
+    
+    const handleStart = async (genres: string[], platforms: string[]) => {
+        const prefs = { genres, platforms };
+        setUserPreferences(prefs);
+        setIsLoading(true);
+        setScreen('swipe');
+        const initialMovies = await fetchMovies(10, prefs, []);
+        if (initialMovies) {
+            setRecommendedMovies(initialMovies.reverse());
+            setAllShownMovieTitles(new Set(initialMovies.map(m => m.title)));
+        }
+        setIsLoading(false);
+    };
+    
+    const loadMoreMovies = useCallback(async () => {
+        if (!userPreferences || isLoadingMore) return;
+        setIsLoadingMore(true);
+        const newMovies = await fetchMovies(5, userPreferences, Array.from(allShownMovieTitles));
+        if (newMovies && newMovies.length > 0) {
+            const newTitles = newMovies.map(m => m.title);
+            const shouldShowWarning = allShownMovieTitles.size >= 15 && !hasShownGenreWarning;
+            
+            if (shouldShowWarning) {
+                const warningCard: Movie = {
+                    id: -1, title: 'Nuevos Horizontes', poster: '', genres: [], platforms: [], rating: 0, year: 0,
+                    synopsis: '¡Exploremos más allá! A partir de ahora, verás recomendaciones de otros géneros que podrían encantarte.'
+                };
+                setRecommendedMovies(prev => [...prev, warningCard, ...newMovies.reverse()]);
+            } else {
+                setRecommendedMovies(prev => [...prev, ...newMovies.reverse()]);
+            }
+            setAllShownMovieTitles(prev => new Set([...prev, ...newTitles]));
+        }
+        setIsLoadingMore(false);
+    }, [userPreferences, allShownMovieTitles, hasShownGenreWarning, fetchMovies, isLoadingMore]);
+
     const handleLoginSuccess = () => {
-        setIsLoggedIn(true);
-        setScreen('profilePicture');
+        setIsLoggingIn(true);
+        setTimeout(() => {
+            setIsLoggedIn(true);
+            setScreen('profilePicture');
+            setIsLoggingIn(false);
+        }, 1500);
     };
     
     const handleLogout = () => {
@@ -390,10 +601,19 @@ const App = () => {
         setUserProfile({ photo: null, name: '', bio: '', interests: [] });
         setSavedList([]);
         setRecommendedMovies([]);
+        setAllShownMovieTitles(new Set());
+        setHasShownGenreWarning(false);
+        setUserPreferences(null);
+        setUserLikedMovies(new Set());
     };
 
     const updateProfile = (data: Partial<UserProfile>) => {
         setUserProfile(prev => ({ ...prev, ...data }));
+    };
+
+    const handleSelectFriend = (friend: Friend) => {
+        setActiveChatFriend(friend);
+        setScreen('chat');
     };
 
     const renderAuth = () => {
@@ -410,15 +630,23 @@ const App = () => {
             case 'profileDetails': return <ProfileDetailsScreen onContinue={() => setScreen('profileInterests')} updateProfile={updateProfile} onBack={() => setScreen('profilePicture')}/>;
             case 'profileInterests': return <ProfileInterestsScreen onFinish={() => setScreen('setup')} updateProfile={updateProfile} onBack={() => setScreen('profileDetails')} />;
             case 'setup': return <SetupScreen onStart={handleStart} />;
-            case 'swipe': return <SwipeScreen movies={recommendedMovies} setSavedList={setSavedList} setScreen={setScreen} userProfile={userProfile} />;
+            case 'swipe': return <SwipeScreen movies={recommendedMovies} setSavedList={setSavedList} setScreen={setScreen} userProfile={userProfile} isLoading={isLoading} isLoadingMore={isLoadingMore} loadMoreMovies={loadMoreMovies} setHasShownGenreWarning={setHasShownGenreWarning} friends={friends} setMatchNotification={setMatchNotification} userLikedMovies={userLikedMovies} setUserLikedMovies={setUserLikedMovies} matchNotification={matchNotification} />;
             case 'myList': return <MyListScreen savedList={savedList} setScreen={setScreen} />;
             case 'profileView': return <ProfileScreen userProfile={userProfile} setScreen={setScreen} onLogout={handleLogout} />;
+            case 'friendsList': return <FriendsListScreen friends={friends} setScreen={setScreen} onSelectFriend={handleSelectFriend} />;
+            case 'chat': return <ChatScreen friend={activeChatFriend} onBack={() => setScreen('friendsList')} />;
             default: return <SetupScreen onStart={handleStart} />;
         }
     };
 
     return (
         <main className="app-container">
+            {isLoggingIn && (
+                <div className="auth-loader-overlay">
+                    <div className="loading-spinner"></div>
+                    <p>Iniciando sesión...</p>
+                </div>
+            )}
             {isLoggedIn ? renderApp() : renderAuth()}
         </main>
     );
